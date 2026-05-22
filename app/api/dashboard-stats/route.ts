@@ -183,15 +183,34 @@ export async function GET() {
     // ===================
     // VIP PLS (BOBOT VARIABEL PER KONSTRUK)
     // ===================
-    // Rata-rata VIP Score per konstruk laten dari hasil PLS Regression
-    // Threshold signifikansi: VIP > 1.0 (Hair et al., 2021)
-    const vipPLS = {
-      AKSESIBILITAS: 1.55,  // Aksesibilitas Transportasi (Jarak Pusat, Akses Kereta, Akses Tol)
-      IP: 1.18,             // Ketersediaan Fasilitas Publik (Skor Fasilitas)
-      Fa: 1.00,             // Risiko Lingkungan (Risiko Banjir, Indeks Kejahatan)
-      Rasio: 1.72,          // NJOP per m² (variabel lokasional)
-      Fisik: 0.65,          // Karakteristik Fisik (Luas, Kamar, Legalitas)
+    // Diambil dari hasil PLS terbaru di database (tabel PlsKonstrukSummary).
+    // Fallback ke nilai default jika belum ada hasil PLS yang tersimpan
+    // (misalnya saat first deploy sebelum pipeline analysis dijalankan).
+    let vipPLS = {
+      AKSESIBILITAS: 1.0,
+      IP: 1.0,
+      Fa: 1.0,
+      Rasio: 1.0,
+      Fisik: 1.0,
     };
+    try {
+      const latestRun = await prisma.plsRun.findFirst({
+        orderBy: { runAt: "desc" },
+        include: { konstrukSummary: true },
+      });
+      if (latestRun) {
+        for (const k of latestRun.konstrukSummary) {
+          const key = k.konstruk.toLowerCase();
+          if (key.includes("aksesibilitas")) vipPLS.AKSESIBILITAS = k.avgVip;
+          else if (key.includes("fasilitas")) vipPLS.IP = k.avgVip;
+          else if (key.includes("risiko") || key.includes("lingkungan")) vipPLS.Fa = k.avgVip;
+          else if (key.includes("lokasional") || key.includes("njop")) vipPLS.Rasio = k.avgVip;
+          else if (key.includes("fisik")) vipPLS.Fisik = k.avgVip;
+        }
+      }
+    } catch (e) {
+      console.warn("PLS data unavailable, using fallback VIP weights", e);
+    }
 
     // ===================
     // DAFTAR PROPERTI (all listings)

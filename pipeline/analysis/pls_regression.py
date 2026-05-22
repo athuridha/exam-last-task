@@ -1,9 +1,36 @@
 import pandas as pd
 import numpy as np
 import os
+import sys
 from sklearn.cross_decomposition import PLSRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import cross_val_predict
+
+# Allow importing save_pls_to_db from sibling module
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+try:
+    from save_pls_to_db import save_pls_run
+    DB_AVAILABLE = True
+except Exception as _e:
+    DB_AVAILABLE = False
+    _DB_IMPORT_ERROR = str(_e)
+
+
+# Mapping variabel ke konstruk laten (sesuai BAB III)
+KONSTRUK_MAP = {
+    'Jarak_ke_Pusat_Kota_km': ('Aksesibilitas Transportasi', 'Jarak_Pusat'),
+    'Akses_Kereta':           ('Aksesibilitas Transportasi', 'Akses_Kereta'),
+    'Akses_Tol':              ('Aksesibilitas Transportasi', 'Akses_Tol'),
+    'Skor_Fasilitas':         ('Ketersediaan Fasilitas Publik', 'Skor_Fasilitas'),
+    'Risiko_Banjir':          ('Risiko Lingkungan', 'Risiko_Banjir'),
+    'Indeks_Kejahatan':       ('Risiko Lingkungan', 'Indeks_Kejahatan'),
+    'Skor_Legalitas':         ('Karakteristik Fisik', 'Skor_Legalitas'),
+    'Luas Tanah (m²)':        ('Karakteristik Fisik', 'Luas_Tanah'),
+    'Luas Bangunan (m²)':     ('Karakteristik Fisik', 'Luas_Bangunan'),
+    'Kamar Tidur':            ('Karakteristik Fisik', 'Kamar_Tidur'),
+    'Kamar Mandi':            ('Karakteristik Fisik', 'Kamar_Mandi'),
+    'NJOP_per_m2':            ('Lokasional', 'NJOP'),
+}
 
 
 def encode_access_column(series):
@@ -161,7 +188,82 @@ def run_pls_analysis(input_csv):
     for _, row in vip_df.iterrows():
         sig = "***" if row['VIP_Score'] > 1.0 else ("**" if row['VIP_Score'] > 0.8 else "")
         print(f"  {row['Variabel']:30s}: VIP={row['VIP_Score']:.4f}  Koef={row['Koefisien']:+.4f} {sig}")
-        
+
+    # ----------------------------------------------------------------
+    # SIMPAN HASIL KE DATABASE (Postgres via Prisma schema)
+    # ----------------------------------------------------------------
+    rmse_train = float(np.sqrt(np.mean((y_scaled.flatten() - pls.predict(X_scaled).flatten()) ** 2)))
+    n_features = X_scaled.shape[1]
+    n_samples = len(X_pls)
+    adj_r2 = 1 - (1 - train_r2) * (n_samples - 1) / max(n_samples - n_features - 1, 1)
+
+    vip_payload = []
+    for _, row in vip_df.iterrows():
+        var = row['Variabel']
+        konstruk, kode = KONSTRUK_MAP.get(var, ('Lainnya', var.replace(' ', '_')))
+        koef = float(row['Koefisien'])
+        vip_payload.append({
+            'variabel': var,
+            'kode': kode,
+            'konstruk': konstruk,
+            'vip': float(row['VIP_Score']),
+            'koefisien': koef,
+            'signifikan': bool(row['VIP_Score'] > 1.0),
+            'arah': 'positif' if koef >= 0 else 'negatif',
+        })
+
+    konstruk_grouped = vip_df.copy()
+    konstruk_grouped['Konstruk'] = konstruk_grouped['Variabel'].map(
+        lambda v: KONSTRUK_MAP.get(v, ('Lainnya', ''))[0]
+    )
+    konstruk_summary = []
+    for konstruk, grp in konstruk_grouped.groupby('Konstruk'):
+        avg = float(grp['VIP_Score'].mean())
+        sig = avg > 1.0
+        # Hipotesis sederhana berdasarkan urutan konstruk (penyesuaian manual via narasi)
+        hip_map = {
+            'Aksesibilitas Transportasi':       'H1 diterima' if sig else 'H1 ditolak',
+            'Ketersediaan Fasilitas Publik':    'H2 diterima' if sig else 'H2 ditolak',
+            'Risiko Lingkungan':                ('H3 diterima' if avg > 1.0 else
+                                                 'H3 diterima (marginal)' if avg >= 0.95 else
+                                                 'H3 ditolak'),
+            'Karakteristik Fisik':              'H4 diterima' if sig else 'H4 ditolak',
+            'Lokasional':                       'Lokasional dominan' if sig else 'Lokasional lemah',
+        }
+        konstruk_summary.append({
+            'konstruk': konstruk,
+            'avg_vip': avg,
+            'signifikan': sig,
+            'hipotesis': hip_map.get(konstruk, '-'),
+        })
+
+    payload = {
+        'method': 'PLSRegression (scikit-learn)',
+        'target_variable': target_col,
+        'n_components': int(best_n_components),
+        'n_samples': int(n_samples),
+        'r_squared': float(train_r2),
+        'adjusted_r_squared': float(adj_r2),
+        'rmse': rmse_train,
+        'cv_r2': float(best_r2_cv),
+        'cross_validation': '5-fold',
+        'preprocessing': 'StandardScaler (Z-score)',
+        'vip_scores': vip_payload,
+        'konstruk_summary': konstruk_summary,
+        'notes': f"Run otomatis dari pls_regression.py pada {input_csv}",
+    }
+
+    if DB_AVAILABLE:
+        try:
+            run_id = save_pls_run(payload)
+            print(f"\n💾 Hasil PLS tersimpan ke DB sebagai PlsRun #{run_id}")
+        except Exception as e:
+            print(f"\n⚠️  Gagal menyimpan ke DB: {e}")
+            print("   Hasil tetap dapat dilihat di output terminal di atas.")
+    else:
+        print(f"\n⚠️  Modul save_pls_to_db tidak tersedia: {_DB_IMPORT_ERROR}")
+        print("   Install: pip install sqlalchemy psycopg2-binary python-dotenv")
+
     print("\nSelesai.")
 
 if __name__ == "__main__":

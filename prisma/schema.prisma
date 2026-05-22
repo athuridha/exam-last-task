@@ -1,5 +1,10 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
+//
+// Skema database mengikuti rancangan Star Schema pada BAB III dengan tambahan
+// dimensi SCD Type 2 untuk NJOP. Tabel flat lama (Listing, Kecamatan, dst.)
+// dipertahankan sebagai tabel staging hasil ETL dan untuk kompatibilitas
+// dashboard selama transisi.
 
 generator client {
   provider = "prisma-client-js"
@@ -10,24 +15,30 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// =====================================================================
+// TABEL STAGING (hasil ETL flat dari pipeline Python)
+// Dipertahankan untuk kompatibilitas API lama. Tabel star schema di
+// bawah diturunkan dari tabel ini lewat seeder/transform.
+// =====================================================================
+
 model Listing {
-  id                Int      @id @default(autoincrement())
-  judul             String
-  harga             BigInt
-  kamarTidur        Int
-  kamarMandi        Int
-  totalKamar        Int
-  luasBangunan      Float
-  luasTanah         Float
-  hargaPerM2Bangun  Float?
-  hargaPerM2Tanah   Float?
-  area              String
-  kota              String
-  kecamatan         String
-  lokasi            String?
-  urlProperti       String
-  gambar            String?
-  segmen            String?
+  id               Int     @id @default(autoincrement())
+  judul            String
+  harga            BigInt
+  kamarTidur       Int
+  kamarMandi       Int
+  totalKamar       Int
+  luasBangunan     Float
+  luasTanah        Float
+  hargaPerM2Bangun Float?
+  hargaPerM2Tanah  Float?
+  area             String
+  kota             String
+  kecamatan        String
+  lokasi           String?
+  urlProperti      String
+  gambar           String?
+  segmen           String?
 
   @@index([kecamatan])
   @@index([kota])
@@ -35,7 +46,7 @@ model Listing {
 }
 
 model Kecamatan {
-  id            Int      @id @default(autoincrement())
+  id            Int     @id @default(autoincrement())
   nama          String
   kota          String
   lat           Float
@@ -58,7 +69,7 @@ model Kecamatan {
 }
 
 model Fasilitas {
-  id     Int    @id @default(autoincrement())
+  id     Int     @id @default(autoincrement())
   nama   String
   jenis  String
   lat    Float
@@ -71,7 +82,7 @@ model Fasilitas {
 }
 
 model Stasiun {
-  id     Int    @id @default(autoincrement())
+  id     Int     @id @default(autoincrement())
   nama   String
   jenis  String
   line   String
@@ -81,10 +92,235 @@ model Stasiun {
 }
 
 model GerbangTol {
-  id      Int    @id @default(autoincrement())
+  id      Int     @id @default(autoincrement())
   nama    String
   ruasTol String
   lat     Float
   lng     Float
   sumber  String?
+}
+
+// =====================================================================
+// STAR SCHEMA — RANCANGAN DATA WAREHOUSE (BAB III)
+// Fact: FactHargaRumah
+// Dimensions: DimLokasi, DimFasilitas, DimRisiko, DimNJOP (SCD Type 2),
+//             DimWaktu
+// =====================================================================
+
+/// Dimensi lokasi — atribut spasial kecamatan (relatif statis)
+model DimLokasi {
+  lokasiKey      Int    @id @default(autoincrement())
+  kecamatan      String
+  kota           String
+  provinsi       String @default("Jabodetabek")
+  lat            Float
+  lng            Float
+  jarakKePusatKm Float?
+
+  // Reverse relations
+  facts       FactHargaRumah[]
+  fasilitas   DimFasilitas?
+  risiko      DimRisiko?
+  njopHistory DimNJOP[]
+
+  @@unique([kecamatan, kota])
+  @@index([kota])
+}
+
+/// Dimensi fasilitas — agregat skor fasilitas per lokasi (snapshot terkini)
+model DimFasilitas {
+  fasilitasKey   Int     @id @default(autoincrement())
+  lokasiKey      Int     @unique
+  skorFasilitas  Float
+  jumlahMall     Int     @default(0)
+  jumlahRs       Int     @default(0)
+  jumlahSekolah  Int     @default(0)
+  jarakTolKm     Float?
+  jarakStasiunKm Float?
+  aksesTol       String?
+  aksesKereta    String?
+
+  lokasi DimLokasi        @relation(fields: [lokasiKey], references: [lokasiKey], onDelete: Cascade)
+  facts  FactHargaRumah[]
+}
+
+/// Dimensi risiko lingkungan — banjir & kejahatan per lokasi
+model DimRisiko {
+  risikoKey         Int      @id @default(autoincrement())
+  lokasiKey         Int      @unique
+  risikoBanjir      Float    @default(0)
+  kategoriBanjir    String?
+  indeksKejahatan   Float    @default(0)
+  kategoriKejahatan String?
+  sumberData        String?
+  diperbaruiPada    DateTime @default(now())
+
+  lokasi DimLokasi        @relation(fields: [lokasiKey], references: [lokasiKey], onDelete: Cascade)
+  facts  FactHargaRumah[]
+}
+
+/// Dimensi NJOP dengan SCD Type 2 — menyimpan history nilai NJOP per kota/tahun
+/// `validFrom`, `validTo`, `isCurrent` mendukung versioning
+model DimNJOP {
+  njopKey   Int       @id @default(autoincrement())
+  lokasiKey Int
+  kota      String
+  tahun     Int
+  njopPerM2 BigInt
+  sumber    String?
+  validFrom DateTime
+  validTo   DateTime?
+  isCurrent Boolean   @default(true)
+
+  lokasi DimLokasi        @relation(fields: [lokasiKey], references: [lokasiKey], onDelete: Cascade)
+  facts  FactHargaRumah[]
+
+  @@unique([lokasiKey, tahun])
+  @@index([kota, isCurrent])
+  @@index([isCurrent])
+}
+
+/// Dimensi waktu — tanggal scraping/observasi listing
+model DimWaktu {
+  waktuKey Int      @id @default(autoincrement())
+  tanggal  DateTime @unique
+  tahun    Int
+  bulan    Int
+  kuartal  Int
+  hari     Int
+
+  facts FactHargaRumah[]
+}
+
+/// Tabel Fakta — measure harga properti
+/// Foreign key ke seluruh dimensi star schema
+model FactHargaRumah {
+  factKey   BigInt @id @default(autoincrement())
+  listingId Int? // referensi ke staging Listing.id (opsional)
+
+  // Foreign keys ke dimensi
+  lokasiKey    Int
+  fasilitasKey Int?
+  risikoKey    Int?
+  njopKey      Int?
+  waktuKey     Int?
+
+  // Measures
+  harga            BigInt
+  hargaPerM2Tanah  Float?
+  hargaPerM2Bangun Float?
+  luasTanah        Float
+  luasBangunan     Float
+  kamarTidur       Int     @default(0)
+  kamarMandi       Int     @default(0)
+  rasioHargaNjop   Float?
+  segmen           String?
+  skorLegalitas    Float?
+
+  // Relations
+  lokasi    DimLokasi     @relation(fields: [lokasiKey], references: [lokasiKey])
+  fasilitas DimFasilitas? @relation(fields: [fasilitasKey], references: [fasilitasKey])
+  risiko    DimRisiko?    @relation(fields: [risikoKey], references: [risikoKey])
+  njop      DimNJOP?      @relation(fields: [njopKey], references: [njopKey])
+  waktu     DimWaktu?     @relation(fields: [waktuKey], references: [waktuKey])
+
+  @@index([lokasiKey])
+  @@index([njopKey])
+  @@index([segmen])
+  @@index([rasioHargaNjop])
+}
+
+// =====================================================================
+// HASIL ANALISIS PLS — disimpan persisten setelah eksekusi pipeline
+// Setiap run pipeline/analysis/pls_regression.py menambah 1 baris PlsRun
+// dengan VIP scores dan koefisien terlampir.
+// =====================================================================
+
+/// Metadata setiap eksekusi PLS Regression
+model PlsRun {
+  id               Int      @id @default(autoincrement())
+  runAt            DateTime @default(now())
+  method           String   @default("PLSRegression (scikit-learn)")
+  targetVariable   String   @default("Rasio_Harga_NJOP")
+  nComponents      Int
+  nSamples         Int
+  rSquared         Float
+  adjustedRSquared Float?
+  rmse             Float
+  cvR2             Float?
+  crossValidation  String   @default("5-fold")
+  preprocessing    String   @default("StandardScaler (Z-score)")
+  notes            String?
+
+  vipScores        PlsVipScore[]
+  konstrukSummary  PlsKonstrukSummary[]
+  olsComparison    PlsOlsComparison?
+  kmeansValidation PlsKmeansValidation?
+
+  @@index([runAt])
+}
+
+/// VIP Score per variabel (relasi 1:N dari PlsRun)
+model PlsVipScore {
+  id         Int     @id @default(autoincrement())
+  runId      Int
+  variabel   String
+  kode       String
+  konstruk   String
+  vip        Float
+  koefisien  Float
+  signifikan Boolean @default(false)
+  arah       String?
+
+  run PlsRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+}
+
+/// Ringkasan rata-rata VIP per konstruk laten
+model PlsKonstrukSummary {
+  id         Int     @id @default(autoincrement())
+  runId      Int
+  konstruk   String
+  avgVip     Float
+  signifikan Boolean
+  hipotesis  String
+
+  run PlsRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+}
+
+/// Hasil OLS comparison untuk pengujian H6
+model PlsOlsComparison {
+  id              Int     @id @default(autoincrement())
+  runId           Int     @unique
+  plsR2           Float
+  olsR2           Float
+  plsRmse         Float
+  olsRmse         Float
+  plsAdjustedR2   Float?
+  olsAdjustedR2   Float?
+  conditionNumber Float?
+  kesimpulan      String?
+
+  run PlsRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+}
+
+/// Hasil K-Means / GMM validation untuk pengujian H5
+model PlsKmeansValidation {
+  id                      Int     @id @default(autoincrement())
+  runId                   Int     @unique
+  nClusters               Int     @default(4)
+  silhouetteScoreInterval Float?
+  silhouetteScoreKmeans   Float?
+  silhouetteScoreGmm      Float?
+  daviesBouldinKmeans     Float?
+  daviesBouldinGmm        Float?
+  ariIntervalVsKmeans     Float?
+  ariIntervalVsGmm        Float?
+  bicOptimalKGmm          Int?
+  kesimpulan              String?
+
+  run PlsRun @relation(fields: [runId], references: [id], onDelete: Cascade)
 }
