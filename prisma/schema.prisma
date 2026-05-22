@@ -1,0 +1,90 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Listing {
+  id                Int      @id @default(autoincrement())
+  judul             String
+  harga             BigInt
+  kamarTidur        Int
+  kamarMandi        Int
+  totalKamar        Int
+  luasBangunan      Float
+  luasTanah         Float
+  hargaPerM2Bangun  Float?
+  hargaPerM2Tanah   Float?
+  area              String
+  kota              String
+  kecamatan         String
+  lokasi            String?
+  urlProperti       String
+  gambar            String?
+  segmen            String?
+
+  @@index([kecamatan])
+  @@index([kota])
+  @@index([harga])
+}
+
+model Kecamatan {
+  id            Int      @id @default(autoincrement())
+  nama          String
+  kota          String
+  lat           Float
+  lng           Float
+  hargaMedian   BigInt?
+  hargaMean     BigInt?
+  jumlah        Int?
+  skorFasilitas Float?
+  mall          Float?
+  rs            Float?
+  pendidikan    Float?
+  jarakTol      Float?
+  jarakStasiun  Float?
+  risikoBanjir  Float?
+  segmenDominan String?
+  njopPerM2     Int?
+
+  @@unique([nama, kota])
+  @@index([kota])
+}
+
+model Fasilitas {
+  id     Int    @id @default(autoincrement())
+  nama   String
+  jenis  String
+  lat    Float
+  lng    Float
+  kota   String
+  sumber String?
+
+  @@index([jenis])
+  @@index([kota])
+}
+
+model Stasiun {
+  id     Int    @id @default(autoincrement())
+  nama   String
+  jenis  String
+  line   String
+  lat    Float
+  lng    Float
+  sumber String?
+}
+
+model GerbangTol {
+  id      Int    @id @default(autoincrement())
+  nama    String
+  ruasTol String
+  lat     Float
+  lng     Float
+  sumber  String?
+}

@@ -1,0 +1,30 @@
+{
+  "total_listings": 31730,
+  "total_kecamatan": 149,
+  "total_kota": 10,
+  "harga_median": 3000000000.0,
+  "harga_min": 50000000.0,
+  "harga_max": 100000000000.0,
+  "segmen_dist": {
+    "Rendah": 4760,
+    "Menengah": 12692,
+    "Tinggi": 8461,
+    "Premium": 5817
+  },
+  "kota_list": [
+    "Bekasi",
+    "Bogor",
+    "Depok",
+    "Jakarta Barat",
+    "Jakarta Pusat",
+    "Jakarta Selatan",
+    "Jakarta Timur",
+    "Jakarta Utara",
+    "Tangerang",
+    "Tangerang Selatan"
+  ],
+  "njop_median": 3000000,
+  "njop_mean": 5478534,
+  "njop_min": 400000,
+  "njop_max": 40000000
+}
