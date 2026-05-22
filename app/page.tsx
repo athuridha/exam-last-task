@@ -429,17 +429,6 @@ export default function Home() {
 
       </div>
 
-      {/* Listing Panel Modal */}
-      {listingKec && (
-        <ListingPanel
-          kecamatan={listingKec.kecamatan}
-          kota={listingKec.kota}
-          onClose={() => setListingKec(null)}
-        />
-      )}
-    </main>
-  );
-}
         {/* === RISIKO KEJAHATAN === */}
         {activeTab === "crime" && (
           <CrimeRiskPanel
@@ -456,7 +445,19 @@ export default function Home() {
           <NewsPanel floodNews={news} crimeNews={crimeNews} selectedKec={selectedKec} />
         )}
 
-        <footer className="text-center text-slate-400 text-xs py-8 mt-10 border-t border-slate-200">
-          <span className="font-medium text-slate-500">Sumber Data: </span>
-          rumah123.com · NJOP 2025 · GADM v4.1 · Google News RSS · {new Date().getFullYear()}
-        </footer>
+      {/* Listing Panel Modal */}
+      {listingKec && (
+        <ListingPanel
+          kecamatan={listingKec.kecamatan}
+          kota={listingKec.kota}
+          onClose={() => setListingKec(null)}
+        />
+      )}
+
+      <footer className="text-center text-slate-400 text-xs py-8 mt-10 border-t border-slate-200">
+        <span className="font-medium text-slate-500">Sumber Data: </span>
+        rumah123.com · NJOP 2025 · GADM v4.1 · Google News RSS · {new Date().getFullYear()}
+      </footer>
+    </main>
+  );
+}
