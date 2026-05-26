@@ -218,7 +218,24 @@ def enrich_features(df, skor_df, flood_risk_df, crime_risk_df=None):
                                            'Sedang (20-30km)', 'Jauh (30-50km)', 'Sangat Jauh (>50km)'])
 
     # NJOP
-    df['NJOP_per_m2'] = df['Kota'].map(NJOP_PER_KOTA)
+    njop_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data_referensi', 'njop_per_kecamatan.csv')
+    if os.path.exists(njop_file):
+        njop_df = pd.read_csv(njop_file)
+        # Handle duplicates just in case
+        njop_df = njop_df.drop_duplicates(subset=['Kecamatan', 'Kota'])
+        
+        if 'NJOP_per_m2' in df.columns:
+            df = df.drop(columns=['NJOP_per_m2'])
+            
+        df = df.merge(njop_df[['Kecamatan', 'Kota', 'NJOP_per_m2']], on=['Kecamatan', 'Kota'], how='left')
+        
+        # Fallback to config Kota dictionary if Kecamatan not found
+        mask = df['NJOP_per_m2'].isna()
+        if mask.any():
+            df.loc[mask, 'NJOP_per_m2'] = df.loc[mask, 'Kota'].map(NJOP_PER_KOTA)
+    else:
+        df['NJOP_per_m2'] = df['Kota'].map(NJOP_PER_KOTA)
+
     df['Nilai_NJOP_Tanah'] = df['NJOP_per_m2'] * df.get('Luas Tanah (m²)', 0)
 
     # Flood Risk
