@@ -16,6 +16,7 @@ interface PropertyItem {
 interface PropertyTableProps {
   data: PropertyItem[];
   onFilter?: (kecamatan: string, kota: string, segmen: string) => void;
+  onViewGallery?: () => void;
 }
 
 const SEGMEN_COLORS: Record<string, string> = {
@@ -32,7 +33,7 @@ const fmt = (n: number) =>
     ? `Rp ${(n / 1e6).toFixed(0)} jt`
     : `Rp ${n.toLocaleString("id-ID")}`;
 
-export default function PropertyTable({ data }: PropertyTableProps) {
+export default function PropertyTable({ data, onViewGallery }: PropertyTableProps) {
   const [sortField, setSortField] = useState<keyof PropertyItem>("rasioHNJOP");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [searchTerm, setSearchTerm] = useState("");
@@ -97,21 +98,23 @@ export default function PropertyTable({ data }: PropertyTableProps) {
               Analitik Berbasis Rasio Harga Pasar terhadap NJOP 2025
             </p>
           </div>
-          <div className="relative">
-            <Search
-              size={14}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-            />
-            <input
-              type="text"
-              placeholder="Cari kecamatan/kota..."
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 w-64"
-            />
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <Search
+                size={14}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+              />
+              <input
+                type="text"
+                placeholder="Cari kecamatan/kota..."
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 w-64"
+              />
+            </div>
           </div>
         </div>
       </div>

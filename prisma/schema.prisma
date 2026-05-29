@@ -192,6 +192,29 @@ model DimWaktu {
   facts FactHargaRumah[]
 }
 
+/// Dimensi properti — atribut fisik per listing (1 baris per listing)
+/// Memisahkan atribut deskriptif properti dari fact table (Kimball star schema)
+model DimProperti {
+  propertiKey   Int     @id @default(autoincrement())
+  listingId     Int     @unique
+  judul         String?
+  luasTanah     Float
+  luasBangunan  Float
+  totalLuas     Float?
+  kamarTidur    Int     @default(0)
+  kamarMandi    Int     @default(0)
+  totalKamar    Int     @default(0)
+  sertifikat    String?
+  skorLegalitas Float?
+  urlProperti   String?
+  gambar        String?
+
+  facts FactHargaRumah[]
+
+  @@index([listingId])
+  @@index([sertifikat])
+}
+
 /// Tabel Fakta — measure harga properti
 /// Foreign key ke seluruh dimensi star schema
 model FactHargaRumah {
@@ -204,8 +227,9 @@ model FactHargaRumah {
   risikoKey    Int?
   njopKey      Int?
   waktuKey     Int?
+  propertiKey  Int?
 
-  // Measures
+  // Measures (additive: harga, rasio; degenerate: segmen)
   harga            BigInt
   hargaPerM2Tanah  Float?
   hargaPerM2Bangun Float?
@@ -223,9 +247,11 @@ model FactHargaRumah {
   risiko    DimRisiko?    @relation(fields: [risikoKey], references: [risikoKey])
   njop      DimNJOP?      @relation(fields: [njopKey], references: [njopKey])
   waktu     DimWaktu?     @relation(fields: [waktuKey], references: [waktuKey])
+  properti  DimProperti?  @relation(fields: [propertiKey], references: [propertiKey])
 
   @@index([lokasiKey])
   @@index([njopKey])
+  @@index([propertiKey])
   @@index([segmen])
   @@index([rasioHargaNjop])
 }

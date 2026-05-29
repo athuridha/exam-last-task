@@ -13,7 +13,7 @@ import Top5KecamatanChart from "@/components/Top5KecamatanChart";
 import VIPPLSChart from "@/components/VIPPLSChart";
 import PropertyTable from "@/components/PropertyTable";
 import CrimeRiskPanel, { CrimeRisk, CrimeNews } from "@/components/CrimeRiskPanel";
-import { Map as MapIcon, Droplets, Newspaper, Activity, RefreshCw, BarChart3, Siren } from "lucide-react";
+import { Map as MapIcon, Droplets, Newspaper, Activity, RefreshCw, BarChart3, Siren, Home as HomeIcon } from "lucide-react";
 
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
 
@@ -333,17 +333,21 @@ export default function Home() {
 
             {/* Filters below KPI */}
             {dashboardStats && (
-              <DashboardFilters
-                kotaList={dashboardStats.kota_list}
-                kecamatanList={dashboardStats.kecamatan_list}
-                selectedKota={filterKota}
-                selectedKecamatan={filterKecamatan}
-                selectedSegmen={filterSegmen}
-                onKotaChange={setFilterKota}
-                onKecamatanChange={setFilterKecamatan}
-                onSegmenChange={setFilterSegmen}
-                onApply={() => {}}
-              />
+              <div className="flex flex-col lg:flex-row gap-3 items-stretch lg:items-center">
+                <div className="flex-grow">
+                  <DashboardFilters
+                    kotaList={dashboardStats.kota_list}
+                    kecamatanList={dashboardStats.kecamatan_list}
+                    selectedKota={filterKota}
+                    selectedKecamatan={filterKecamatan}
+                    selectedSegmen={filterSegmen}
+                    onKotaChange={setFilterKota}
+                    onKecamatanChange={setFilterKecamatan}
+                    onSegmenChange={setFilterSegmen}
+                    onApply={() => {}}
+                  />
+                </div>
+              </div>
             )}
 
             {/* Map — Full width, prominent */}
@@ -373,7 +377,12 @@ export default function Home() {
             )}
 
             {/* Property Table */}
-            {filteredStats && <PropertyTable data={filteredStats.property_list} />}
+            {filteredStats && (
+              <PropertyTable
+                data={filteredStats.property_list}
+                onViewGallery={() => setListingKec({ kecamatan: "Semua", kota: filterKota || "Semua" })}
+              />
+            )}
           </div>
         )}
 
@@ -382,17 +391,21 @@ export default function Home() {
           <div className="space-y-4">
             {/* Filters */}
             {dashboardStats && (
-              <DashboardFilters
-                kotaList={dashboardStats.kota_list}
-                kecamatanList={dashboardStats.kecamatan_list}
-                selectedKota={filterKota}
-                selectedKecamatan={filterKecamatan}
-                selectedSegmen={filterSegmen}
-                onKotaChange={setFilterKota}
-                onKecamatanChange={setFilterKecamatan}
-                onSegmenChange={setFilterSegmen}
-                onApply={() => {}}
-              />
+              <div className="flex flex-col lg:flex-row gap-3 items-stretch lg:items-center">
+                <div className="flex-grow">
+                  <DashboardFilters
+                    kotaList={dashboardStats.kota_list}
+                    kecamatanList={dashboardStats.kecamatan_list}
+                    selectedKota={filterKota}
+                    selectedKecamatan={filterKecamatan}
+                    selectedSegmen={filterSegmen}
+                    onKotaChange={setFilterKota}
+                    onKecamatanChange={setFilterKecamatan}
+                    onSegmenChange={setFilterSegmen}
+                    onApply={() => {}}
+                  />
+                </div>
+              </div>
             )}
 
             {/* KPI */}
@@ -413,7 +426,12 @@ export default function Home() {
             )}
 
             {/* Property Table */}
-            {filteredStats && <PropertyTable data={filteredStats.property_list} />}
+            {filteredStats && (
+              <PropertyTable
+                data={filteredStats.property_list}
+                onViewGallery={() => setListingKec({ kecamatan: "Semua", kota: filterKota || "Semua" })}
+              />
+            )}
           </div>
         )}
 

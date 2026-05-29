@@ -66,13 +66,19 @@ export default function ListingPanel({ kecamatan, kota, onClose }: Props) {
   const fetchListings = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({
-        kecamatan,
+      const queryObj: Record<string, string> = {
         page: String(page),
         limit: "12",
         sort,
         order,
-      });
+      };
+      if (kecamatan && kecamatan !== "Semua") {
+        queryObj.kecamatan = kecamatan;
+      }
+      if (kota && kota !== "Semua") {
+        queryObj.kota = kota;
+      }
+      const params = new URLSearchParams(queryObj);
       const res = await fetch(`/api/listings?${params}`);
       if (res.ok) {
         const json = await res.json();
@@ -84,7 +90,7 @@ export default function ListingPanel({ kecamatan, kota, onClose }: Props) {
       // silently fail
     }
     setLoading(false);
-  }, [kecamatan, page, sort, order]);
+  }, [kecamatan, kota, page, sort, order]);
 
   useEffect(() => {
     fetchListings();
@@ -108,11 +114,15 @@ export default function ListingPanel({ kecamatan, kota, onClose }: Props) {
             </div>
             <div>
               <h2 className="text-lg font-semibold text-slate-900">
-                Listing di {kecamatan}
+                {kecamatan === "Semua"
+                  ? (kota === "Semua" ? "Galeri Semua Properti Jabodetabek" : `Galeri Properti di ${kota}`)
+                  : `Listing di ${kecamatan}`}
               </h2>
               <p className="text-xs text-slate-400 flex items-center gap-1">
                 <MapPin size={10} />
-                {kota} &middot;{" "}
+                {kecamatan === "Semua"
+                  ? (kota === "Semua" ? "Jabodetabek" : kota)
+                  : `${kota}`} &middot;{" "}
                 <span className="font-medium text-indigo-600">
                   {total.toLocaleString("id-ID")} properti
                 </span>

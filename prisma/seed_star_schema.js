@@ -2,8 +2,8 @@
  * Seeder Star Schema
  * ------------------
  * Membangun tabel dimensi (DimLokasi, DimFasilitas, DimRisiko, DimNJOP,
- * DimWaktu) dan tabel fakta (FactHargaRumah) dari tabel staging
- * (Listing + Kecamatan) yang sudah dipopulate oleh pipeline ETL Python.
+ * DimWaktu, DimProperti) dan tabel fakta (FactHargaRumah) dari tabel
+ * staging (Listing + Kecamatan) yang sudah dipopulate oleh pipeline ETL Python.
  *
  * Cara pakai:
  *   node prisma/seed_star_schema.js
@@ -45,7 +45,7 @@ function kategoriKejahatan(v) {
 }
 
 async function buildDimLokasi() {
-  console.log("\n[1/6] Building DimLokasi...");
+  console.log("\n[1/7] Building DimLokasi...");
   const kecList = await prisma.kecamatan.findMany();
   let count = 0;
   for (const k of kecList) {
@@ -65,7 +65,7 @@ async function buildDimLokasi() {
 }
 
 async function buildDimFasilitas() {
-  console.log("\n[2/6] Building DimFasilitas...");
+  console.log("\n[2/7] Building DimFasilitas...");
   const lokasi = await prisma.dimLokasi.findMany();
   const kecLookup = new Map();
   for (const k of await prisma.kecamatan.findMany()) {
@@ -105,7 +105,7 @@ async function buildDimFasilitas() {
 }
 
 async function buildDimRisiko() {
-  console.log("\n[3/6] Building DimRisiko...");
+  console.log("\n[3/7] Building DimRisiko...");
   // Indeks kejahatan per kota (skala 1–5) — fallback dari pipeline/config.py
   const INDEKS_KEJAHATAN_KOTA = {
     "Jakarta Pusat": 3.8,
@@ -154,7 +154,7 @@ async function buildDimRisiko() {
 }
 
 async function buildDimNJOP_SCD2() {
-  console.log("\n[4/6] Building DimNJOP (SCD Type 2)...");
+  console.log("\n[4/7] Building DimNJOP (SCD Type 2)...");
   const lokasi = await prisma.dimLokasi.findMany();
   const kecLookup = new Map();
   for (const k of await prisma.kecamatan.findMany()) {
@@ -227,7 +227,7 @@ async function buildDimNJOP_SCD2() {
 }
 
 async function buildDimWaktu() {
-  console.log("\n[5/6] Building DimWaktu...");
+  console.log("\n[5/7] Building DimWaktu...");
   // Tanggal observasi listing = tanggal seeding pertama. Untuk skripsi
   // cukup 1 baris waktu (snapshot cross-sectional 2025).
   const tanggal = new Date(`${NJOP_TAHUN}-01-01`);
@@ -245,8 +245,76 @@ async function buildDimWaktu() {
   console.log(`  ✅ 1 baris DimWaktu (snapshot ${NJOP_TAHUN})`);
 }
 
+const SKOR_LEGALITAS = {
+  SHM: 5.0,
+  SHGB: 4.0,
+  "Strata Title": 3.5,
+  "Ada Sertifikat": 3.0,
+  AJB: 2.5,
+  "Tidak Disebutkan": 2.5,
+  PPJB: 2.0,
+  Girik: 1.5,
+};
+
+function detectSertifikat(judul) {
+  const j = String(judul ?? "").toLowerCase();
+  if (j.includes("shm") || j.includes("hak milik")) return "SHM";
+  if (j.includes("shgb") || j.includes("hgb") || j.includes("hak guna bangunan")) return "SHGB";
+  if (j.includes("strata")) return "Strata Title";
+  if (j.includes("girik") || j.includes("letter c")) return "Girik";
+  if (j.includes("ppjb")) return "PPJB";
+  if (j.includes("ajb")) return "AJB";
+  if (j.includes("sertifikat") || j.includes("sertif")) return "Ada Sertifikat";
+  return "Tidak Disebutkan";
+}
+
+async function buildDimProperti() {
+  console.log("\n[6/7] Building DimProperti...");
+  // Truncate dan reload — atribut fisik per listing
+  await prisma.dimProperti.deleteMany({});
+  console.log(`  🗑️  DimProperti dikosongkan untuk reload`);
+
+  const BATCH = 1000;
+  let cursor = 0;
+  let total = 0;
+  const totalListings = await prisma.listing.count();
+
+  while (cursor < totalListings) {
+    const listings = await prisma.listing.findMany({
+      skip: cursor,
+      take: BATCH,
+      orderBy: { id: "asc" },
+    });
+    if (listings.length === 0) break;
+
+    const rows = listings.map((l) => {
+      const sertifikat = detectSertifikat(l.judul);
+      return {
+        listingId: l.id,
+        judul: l.judul,
+        luasTanah: l.luasTanah,
+        luasBangunan: l.luasBangunan,
+        totalLuas: l.luasTanah + l.luasBangunan,
+        kamarTidur: l.kamarTidur,
+        kamarMandi: l.kamarMandi,
+        totalKamar: l.totalKamar ?? l.kamarTidur + l.kamarMandi,
+        sertifikat,
+        skorLegalitas: SKOR_LEGALITAS[sertifikat] ?? 2.5,
+        urlProperti: l.urlProperti,
+        gambar: l.gambar,
+      };
+    });
+
+    await prisma.dimProperti.createMany({ data: rows });
+    total += rows.length;
+    cursor += BATCH;
+    process.stdout.write(`\r  ⏳ ${total}/${totalListings} properti...`);
+  }
+  console.log(`\n  ✅ ${total} baris DimProperti`);
+}
+
 async function buildFactHargaRumah() {
-  console.log("\n[6/6] Building FactHargaRumah...");
+  console.log("\n[7/7] Building FactHargaRumah...");
 
   // Build lookup maps
   const lokasiMap = new Map();
@@ -264,6 +332,12 @@ async function buildFactHargaRumah() {
   const njopMap = new Map();
   for (const n of await prisma.dimNJOP.findMany({ where: { isCurrent: true } })) {
     njopMap.set(n.lokasiKey, n);
+  }
+  const propertiMap = new Map();
+  for (const p of await prisma.dimProperti.findMany({
+    select: { propertiKey: true, listingId: true },
+  })) {
+    propertiMap.set(p.listingId, p.propertiKey);
   }
   const waktu = await prisma.dimWaktu.findFirst({
     where: { tahun: NJOP_TAHUN },
@@ -308,6 +382,7 @@ async function buildFactHargaRumah() {
         risikoKey: risikoMap.get(lo.lokasiKey) ?? null,
         njopKey: njop?.njopKey ?? null,
         waktuKey,
+        propertiKey: propertiMap.get(l.id) ?? null,
         harga: l.harga,
         hargaPerM2Tanah,
         hargaPerM2Bangun: l.hargaPerM2Bangun,
@@ -342,6 +417,7 @@ async function main() {
   await buildDimRisiko();
   await buildDimNJOP_SCD2();
   await buildDimWaktu();
+  await buildDimProperti();
   await buildFactHargaRumah();
 
   const elapsed = ((Date.now() - start) / 1000).toFixed(2);
